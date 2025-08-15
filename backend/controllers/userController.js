@@ -1,28 +1,48 @@
 import bcrypt from "bcrypt";
 import User from "../models/userModel.js";
-import jwt from "jsonwebtoken";
+// import jwt from "jsonwebtoken";
 
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body || {};
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
 
     const userExist = await User.findOne({ email });
     if (userExist) {
-      return res.status(200).json({ message: "User Already Exist..." });
+      // Use 409 Conflict and a clear message for existing users.
+      return res
+        .status(409)
+        .json({ message: "User with this email already exists." });
     }
 
-    const hashpassword = bcrypt.hash(10, password);
-    const userRegister = await User.create({
+    // Correctly await the hashing process.
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create the new user with the hashed password.
+    const newUser = await User.create({
       name,
       email,
-      password: hashpassword,
+      password: hashedPassword,
     });
-    res
-      .status(200)
-      .json({ userRegister, message: "Registration Successfully Complate" });
+
+    // Create a user object without the password to send back.
+    // The `_doc` property of a Mongoose document contains the raw data.
+    const userWithoutPassword = { ...newUser._doc };
+    delete userWithoutPassword.password;
+
+    // Send a 201 Created status and the new user object without the password.
+    res.status(201).json({
+      user: userWithoutPassword,
+      message: "Registration completed successfully.",
+    });
   } catch (error) {
-    res.status(400).json({ error: "Internal Server Error.." });
-    console.log(error);
+    console.error("Registration error:", error);
+    // Return a generic, safe error message to the client.
+    res
+      .status(500)
+      .json({ error: "An unexpected error occurred. Please try again." });
   }
 };
 
